@@ -2,6 +2,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Разрешение на использование камеры -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- Указание, что камера требуется для работы -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -12,14 +18,18 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.QRCodeScaner"
         tools:targetApi="31">
+
+        <!-- Meta-данные для CameraX -->
+        <meta-data
+            android:name="androidx.camera.lifecycle.ProcessCameraProvider"
+            android:value="androidx.startup" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:label="@string/app_name"
             android:theme="@style/Theme.QRCodeScaner">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
