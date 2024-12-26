@@ -6,12 +6,12 @@ plugins {
 
 android {
     namespace = "com.example.qrcodescaner"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.example.qrcodescaner"
         minSdk = 21
-        targetSdk = 34
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0"
 
