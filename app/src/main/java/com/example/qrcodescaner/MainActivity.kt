@@ -2,10 +2,12 @@ package com.example.qrcodescaner
 
 import android.os.Bundle
 import android.util.Log
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
@@ -16,7 +18,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -38,6 +39,7 @@ class MainActivity : ComponentActivity() {
         val requestPermissionLauncher =
             registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
                 if (isGranted) {
+                    Log.d("QRCodeScanner", "Permission granted")
                     setContent {
                         QRCodeScanerTheme {
                             Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
@@ -46,11 +48,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 } else {
-                    Toast.makeText(
-                        this,
-                        "Permission for camera is required to run the app",
-                        Toast.LENGTH_SHORT
-                    ).show()
+                    Log.e("QRCodeScanner", "Permission denied")
                 }
             }
 
@@ -65,9 +63,8 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun QRCodeScanner(modifier: Modifier = Modifier) {
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     var scannedCode by remember { mutableStateOf<String?>(null) }
-    var cameraInitialized by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
 
     Box(modifier = modifier.fillMaxSize()) {
         AndroidView(
@@ -78,12 +75,12 @@ fun QRCodeScanner(modifier: Modifier = Modifier) {
                 cameraProviderFuture.addListener({
                     try {
                         val cameraProvider = cameraProviderFuture.get()
-                        val preview = androidx.camera.core.Preview.Builder().build().also {
-                            it.setSurfaceProvider(previewView.surfaceProvider)
+                        val preview = Preview.Builder().build().also {
+                            it.surfaceProvider = previewView.surfaceProvider
                         }
 
-                        val imageAnalysis = androidx.camera.core.ImageAnalysis.Builder()
-                            .setBackpressureStrategy(androidx.camera.core.ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                        val imageAnalysis = ImageAnalysis.Builder()
+                            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                             .build()
 
                         imageAnalysis.setAnalyzer(ContextCompat.getMainExecutor(context)) { imageProxy ->
@@ -115,16 +112,13 @@ fun QRCodeScanner(modifier: Modifier = Modifier) {
 
                         cameraProvider.unbindAll()
                         cameraProvider.bindToLifecycle(
-                            context as ComponentActivity,
-                            androidx.camera.core.CameraSelector.DEFAULT_BACK_CAMERA,
+                            lifecycleOwner,
+                            CameraSelector.DEFAULT_BACK_CAMERA,
                             preview,
                             imageAnalysis
                         )
-
-                        cameraInitialized = true
                     } catch (exc: Exception) {
                         Log.e("QRCodeScanner", "Camera initialization failed", exc)
-                        errorMessage = "Camera initialization failed: ${exc.localizedMessage}"
                     }
                 }, ContextCompat.getMainExecutor(context))
 
@@ -132,28 +126,6 @@ fun QRCodeScanner(modifier: Modifier = Modifier) {
             },
             modifier = Modifier.fillMaxSize()
         )
-
-        if (!cameraInitialized) {
-            Text(
-                text = "Initializing camera...",
-                modifier = Modifier.align(Alignment.Center),
-                color = Color.White,
-                fontSize = 18.sp
-            )
-        }
-
-        errorMessage?.let {
-            Text(
-                text = it,
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(8.dp)
-                    .background(Color.Red.copy(alpha = 0.7f))
-                    .padding(8.dp),
-                color = Color.White,
-                fontSize = 14.sp
-            )
-        }
 
         scannedCode?.let { code ->
             Box(
