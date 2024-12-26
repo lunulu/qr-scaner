@@ -65,4 +65,8 @@ dependencies {
 
     // ML Kit для сканирования QR-кодов
     implementation(libs.mlkit.barcode.scanning)
+
+    // HTTP
+    implementation(libs.retrofit)
+    implementation(libs.retrofit.gson)
 }

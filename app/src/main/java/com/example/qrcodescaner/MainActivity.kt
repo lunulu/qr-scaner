@@ -30,6 +30,7 @@ import java.util.concurrent.Executors
 
 class MainActivity : ComponentActivity() {
     private lateinit var cameraExecutor: ExecutorService
+    private val repository = QRCodeRepository()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -59,87 +60,118 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
         cameraExecutor.shutdown()
     }
-}
 
-@Composable
-fun QRCodeScanner(modifier: Modifier = Modifier) {
-    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
-    var scannedCode by remember { mutableStateOf<String?>(null) }
+    @Composable
+    fun QRCodeScanner(modifier: Modifier = Modifier) {
+        val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+        var scannedCode by remember { mutableStateOf<String?>(null) }
+        var qrCodeData by remember { mutableStateOf<String?>(null) }
 
-    Box(modifier = modifier.fillMaxSize()) {
-        AndroidView(
-            factory = { context ->
-                val previewView = PreviewView(context)
-                val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
+        Box(modifier = modifier.fillMaxSize()) {
+            AndroidView(
+                factory = { context ->
+                    val previewView = PreviewView(context)
+                    val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
 
-                cameraProviderFuture.addListener({
-                    try {
-                        val cameraProvider = cameraProviderFuture.get()
-                        val preview = Preview.Builder().build().also {
-                            it.surfaceProvider = previewView.surfaceProvider
-                        }
+                    cameraProviderFuture.addListener({
+                        try {
+                            val cameraProvider = cameraProviderFuture.get()
+                            val preview = Preview.Builder().build().also {
+                                it.surfaceProvider = previewView.surfaceProvider
+                            }
 
-                        val imageAnalysis = ImageAnalysis.Builder()
-                            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                            .build()
+                            val imageAnalysis = ImageAnalysis.Builder()
+                                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                                .build()
 
-                        imageAnalysis.setAnalyzer(ContextCompat.getMainExecutor(context)) { imageProxy ->
-                            @androidx.annotation.OptIn(androidx.camera.core.ExperimentalGetImage::class)
-                            val mediaImage = imageProxy.image
-                            if (mediaImage != null) {
-                                val image = InputImage.fromMediaImage(
-                                    mediaImage,
-                                    imageProxy.imageInfo.rotationDegrees
-                                )
-                                val scanner = BarcodeScanning.getClient()
-                                scanner.process(image)
-                                    .addOnSuccessListener { barcodes ->
-                                        for (barcode in barcodes) {
-                                            barcode.displayValue?.let { value ->
-                                                scannedCode = value
-                                                Log.d("QRCodeScanner", "QR Code: $value")
+                            imageAnalysis.setAnalyzer(ContextCompat.getMainExecutor(context)) { imageProxy ->
+                                @androidx.annotation.OptIn(androidx.camera.core.ExperimentalGetImage::class)
+                                val mediaImage = imageProxy.image
+                                if (mediaImage != null) {
+                                    val image = InputImage.fromMediaImage(
+                                        mediaImage,
+                                        imageProxy.imageInfo.rotationDegrees
+                                    )
+                                    val scanner = BarcodeScanning.getClient()
+                                    scanner.process(image)
+                                        .addOnSuccessListener { barcodes ->
+                                            for (barcode in barcodes) {
+                                                barcode.displayValue?.let { value ->
+                                                    scannedCode = value
+                                                    if (value.matches(Regex("\\d+"))) {
+                                                        val id = value.toLong()
+                                                        repository.fetchQRCodeData(
+                                                            id,
+                                                            onSuccess = { response ->
+                                                                qrCodeData = response.data
+                                                                Log.d("QRCodeScanner", "Data: ${response.data}")
+                                                            },
+                                                            onError = { error ->
+                                                                Log.e("QRCodeScanner", error)
+                                                            }
+                                                        )
+                                                    } else {
+                                                        Log.d("QRCodeScanner", "Not a numeric QR Code: $value")
+                                                    }
+                                                }
                                             }
                                         }
-                                    }
-                                    .addOnFailureListener {
-                                        Log.e("QRCodeScanner", "QR Code scanning failed", it)
-                                    }
-                                    .addOnCompleteListener {
-                                        imageProxy.close()
-                                    }
+                                        .addOnFailureListener {
+                                            Log.e("QRCodeScanner", "QR Code scanning failed", it)
+                                        }
+                                        .addOnCompleteListener {
+                                            imageProxy.close()
+                                        }
+                                }
                             }
+
+                            cameraProvider.unbindAll()
+                            cameraProvider.bindToLifecycle(
+                                lifecycleOwner,
+                                CameraSelector.DEFAULT_BACK_CAMERA,
+                                preview,
+                                imageAnalysis
+                            )
+                        } catch (exc: Exception) {
+                            Log.e("QRCodeScanner", "Camera initialization failed", exc)
                         }
+                    }, ContextCompat.getMainExecutor(context))
 
-                        cameraProvider.unbindAll()
-                        cameraProvider.bindToLifecycle(
-                            lifecycleOwner,
-                            CameraSelector.DEFAULT_BACK_CAMERA,
-                            preview,
-                            imageAnalysis
-                        )
-                    } catch (exc: Exception) {
-                        Log.e("QRCodeScanner", "Camera initialization failed", exc)
-                    }
-                }, ContextCompat.getMainExecutor(context))
+                    previewView
+                },
+                modifier = Modifier.fillMaxSize()
+            )
 
-                previewView
-            },
-            modifier = Modifier.fillMaxSize()
-        )
+            scannedCode?.let { code ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color.Black.copy(alpha = 0.7f))
+                        .padding(16.dp)
+                        .align(Alignment.BottomCenter)
+                ) {
+                    Text(
+                        text = "QR Code: $code",
+                        color = Color.White,
+                        fontSize = 16.sp
+                    )
+                }
+            }
 
-        scannedCode?.let { code ->
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color.Black.copy(alpha = 0.7f))
-                    .padding(16.dp)
-                    .align(Alignment.BottomCenter)
-            ) {
-                Text(
-                    text = "QR Code: $code",
-                    color = Color.White,
-                    fontSize = 16.sp
-                )
+            qrCodeData?.let { data ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color.Green.copy(alpha = 0.7f))
+                        .padding(16.dp)
+                        .align(Alignment.TopCenter)
+                ) {
+                    Text(
+                        text = "Data: $data",
+                        color = Color.White,
+                        fontSize = 16.sp
+                    )
+                }
             }
         }
     }
